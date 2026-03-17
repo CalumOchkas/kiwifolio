@@ -1,0 +1,86 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Portfolio {
+  id              String            @id @default(uuid())
+  name            String
+  trades          Trade[]
+  dividends       Dividend[]
+  snapshots       TaxYearSnapshot[]
+  holdingSettings HoldingSettings[]
+}
+
+model Trade {
+  id          String   @id @default(uuid())
+  portfolioId String
+  ticker      String
+  tradeType   String // "BUY" or "SELL"
+  tradeDate   DateTime
+  quantity    Float
+  price       Float // In native currency
+  brokerage   Float // In native currency
+  currency    String // e.g., USD, AUD
+  fxRateToNzd Float // Cached Exchange rate on tradeDate
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+}
+
+model Dividend {
+  id          String   @id @default(uuid())
+  portfolioId String
+  ticker      String
+  date        DateTime
+  grossAmount Float // In native currency
+  taxWithheld Float // In native currency
+  currency    String
+  fxRateToNzd Float // Cached Exchange rate on dividend date
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+}
+
+model HoldingSettings {
+  id          String  @id @default(uuid())
+  portfolioId String
+  ticker      String
+  isFifExempt Boolean @default(false) // e.g., True for most ASX stocks
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, ticker])
+}
+
+model TaxYearSnapshot {
+  id               String  @id @default(uuid())
+  portfolioId      String
+  taxYear          String // Format: "2023-2024" (April 1 to March 31)
+  ticker           String
+  openingQty       Float
+  openingPrice     Float // April 1 native price
+  openingFxRate    Float // April 1 FX rate to NZD
+  closingQty       Float
+  closingPrice     Float // March 31 native price
+  closingFxRate    Float // March 31 FX rate to NZD
+  isManuallyEdited Boolean @default(false) // True if user overrides API data
+  portfolio        Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+
+  @@unique([portfolioId, taxYear, ticker])
+}
+
+model FxRateCache {
+  date     DateTime
+  currency String // e.g., USD
+  rateNzd  Float // Value of 1 unit of currency in NZD
+
+  @@id([date, currency])
+}
+
+model EodPriceCache {
+  date   DateTime
+  ticker String
+  price  Float // In native currency
+
+  @@id([date, ticker])
+}
