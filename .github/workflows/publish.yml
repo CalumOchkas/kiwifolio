@@ -38,7 +38,7 @@ jobs:
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest
           labels: |
             org.opencontainers.image.title=KiwiFolio
             org.opencontainers.image.description=Self-hosted NZ FIF portfolio tracker and tax calculator
