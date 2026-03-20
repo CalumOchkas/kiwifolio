@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { getAvailableTaxYears } from "@/app/actions/sync-market-data";
 import { TaxReportClient } from "@/components/tax-report-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function TaxReportPage() {
   const portfolios = await prisma.portfolio.findMany({
     orderBy: { name: "asc" },

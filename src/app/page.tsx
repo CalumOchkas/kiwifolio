@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { DashboardClient } from "@/components/dashboard-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const portfolios = await prisma.portfolio.findMany({
     include: {
