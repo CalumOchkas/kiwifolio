@@ -79,7 +79,7 @@ function useBackgroundSync() {
   return syncStatus;
 }
 
-function AppSidebar() {
+function AppSidebar({ version }: { version: string }) {
   const pathname = usePathname();
   const [portfolios, setPortfolios] = useState<{ id: string; name: string }[]>(
     []
@@ -219,7 +219,7 @@ function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="px-4 py-3 border-t">
-        <div className="text-xs text-muted-foreground/50 mb-1.5">v0.1.3</div>
+        <div className="text-xs text-muted-foreground/50 mb-1.5">v{version}</div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {syncStatus?.status === "syncing" ? (
             <>
@@ -252,11 +252,17 @@ function AppSidebar() {
   );
 }
 
-export function AppLayout({ children }: { children: React.ReactNode }) {
+export function AppLayout({
+  children,
+  version,
+}: {
+  children: React.ReactNode;
+  version: string;
+}) {
   return (
     <TooltipProvider>
       <SidebarProvider>
-        <AppSidebar />
+        <AppSidebar version={version} />
         <SidebarInset className="min-w-0">
           <header className="flex h-14 shrink-0 items-center gap-2 border-b px-4">
             <SidebarTrigger />
