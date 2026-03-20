@@ -12,7 +12,7 @@
 * **Component Architecture:** Use Next.js App Router. Default to Server Components. Use Client Components only when interactivity (hooks, state) is required. Use Next.js Server Actions for database mutations instead of traditional API routes where possible.  
 * **UI Library:** Use shadcn/ui and Tailwind CSS.  
 * **Database:** SQLite via Prisma ORM. Store the .db file in a local directory that can be mounted as a Docker volume.  
-* **API Constraints:** Rely entirely on yahoo-finance2 for market data and FX rates. Implement aggressive local database caching to prevent rate-limiting. NEVER fetch market data on page load; only fetch on explicit user action or via background sync.
+* **API Constraints:** Rely entirely on yahoo-finance2 for market data and FX rates. Implement aggressive local database caching to prevent rate-limiting. Use in-memory TTL caching (1 hour) for live quotes on page load to avoid hammering the API.
 
 ## **2\. Complete Prisma Schema**
 
@@ -147,12 +147,16 @@ The FIF Tax year runs from **April 1 to March 31**. The engine must calculate bo
 
 ## **4\. UI/UX & Application Features**
 
-1. **Dashboard:** \* Total portfolio value (NZD).  
-   * De Minimis $50k cost-basis progress bar.  
-   * List of portfolios with quick links to their Tax Reports.  
-2. **Holdings & Transactions View:**  
-   * Tables to list, add, edit, and delete Trades and Dividends.  
-   * Toggle to mark a ticker as isFifExempt.  
+1. **Dashboard:** \* Global summary cards: Total Market Value, Capital Gain/Loss, Dividends, Total Return (all in NZD).
+   * Per-portfolio cards with market value, return, and holding count.
+   * Portfolio management (create, edit, delete).
+   * De Minimis $50k cost-basis progress bar.
+   * Market data auto-refreshes on page load using in-memory cached live quotes (1-hour TTL).
+2. **Holdings & Transactions View:**
+   * **Overview tab (default):** Current holdings table with per-ticker market value, cost base, gain/loss ($ and %), dividends, total return. Summary cards at the top.
+   * **Trades tab:** Tables to list, add, edit, and delete Trades.
+   * **Dividends tab:** Tables to list, add, edit, and delete Dividends.
+   * **FIF Settings tab:** Toggle to mark a ticker as isFifExempt.  
 3. **FIF Tax Report View:**  
    * Dropdown to select Tax Year (e.g., "2023-2024").  
    * **Action Button:** "Sync Market Data" \- Triggers yahoo-finance2 to populate TaxYearSnapshot for April 1 and March 31 values, and fetch missing FX rates. Provide visual loading state.  
@@ -171,3 +175,5 @@ The FIF Tax year runs from **April 1 to March 31**. The engine must calculate bo
 * **Phase 4: The Tax Math.** Create the TypeScript utility functions to calculate FDR, CV, Quick Sales, and the De Minimis threshold based strictly on the formulas in Section 3\. Write unit tests for these math functions if possible.  
 * **Phase 5: The FIF Report UI.** Build the Tax Report page. Wire the math functions to the frontend. Implement the manual overrides for TaxYearSnapshot and the FTC aggregation display.  
 * **Phase 6: Polish.** Implement the CSV export functionality and the SQLite database backup/restore buttons. Create a docker-compose.yml and Dockerfile.
+* **Phase 7: Portfolio Tracking.** Add live portfolio tracking with current market values, weighted average cost computation, capital gains, dividends, and total return. Dashboard shows global and per-portfolio summaries. Holdings page gets Overview tab with holdings table. CSV import with auto-detection for Sharesies, Hatch, Stake, Fidelity International.
+* **Phase 8: Open-Source Release.** Add MIT license, CONTRIBUTING.md, SECURITY.md. Fix Docker first-run bootstrapping with entrypoint script and clean bootstrap DB. Switch to bind-mount persistence. Rewrite README for public users. Add deployment and usage documentation. Add GHCR publishing via GitHub Actions. Adopt semantic versioning.

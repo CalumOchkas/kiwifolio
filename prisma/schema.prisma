@@ -43,11 +43,14 @@ model Dividend {
 }
 
 model HoldingSettings {
-  id          String  @id @default(uuid())
-  portfolioId String
-  ticker      String
-  isFifExempt Boolean @default(false) // e.g., True for most ASX stocks
-  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  id             String  @id @default(uuid())
+  portfolioId    String
+  ticker         String
+  isFifExempt    Boolean @default(false) // e.g., True for most ASX stocks
+  yahooSymbol    String? // Override ticker for Yahoo Finance lookups (e.g. "CSPX.L")
+  instrumentName String? // Human-readable name (e.g. "Apple Inc.")
+  exchange       String? // Exchange identifier (e.g. "NZX", "NYSE", "LSE")
+  portfolio      Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 
   @@unique([portfolioId, ticker])
 }
@@ -83,4 +86,33 @@ model EodPriceCache {
   price  Float // In native currency
 
   @@id([date, ticker])
+}
+
+model AppliedSplit {
+  id             String   @id @default(uuid())
+  ticker         String
+  splitDate      DateTime
+  numerator      Float
+  denominator    Float
+  splitRatio     String // e.g., "10:1"
+  appliedAt      DateTime @default(now())
+  tradesAdjusted Int
+
+  @@unique([ticker, splitDate])
+}
+
+model AppSetting {
+  key   String @id
+  value String
+}
+
+model SyncIssue {
+  id         String    @id @default(uuid())
+  ticker     String
+  issueType  String // PRICE_MISSING | FX_RATE_MISSING | SYNC_FAILED | SPLIT_FETCH_FAILED
+  message    String
+  context    String? // JSON: { taxYear, date, currency, portfolioId }
+  resolution String
+  occurredAt DateTime  @default(now())
+  resolvedAt DateTime?
 }
