@@ -1,0 +1,11 @@
+services:
+  kiwifolio:
+    image: ghcr.io/calumochkas/kiwifolio:latest
+    # build: .  # Uncomment to build from source instead of pulling the image
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=file:./data/kiwifolio.db
+    restart: unless-stopped
