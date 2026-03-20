@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DM_Sans, Geist_Mono, Sora } from "next/font/google";
 import "./globals.css";
 import { AppLayout } from "@/components/app-layout";
+import packageJson from "../../package.json";
 
 const dmSans = DM_Sans({
   variable: "--font-body",
@@ -38,7 +39,7 @@ export default function RootLayout({
       <body
         className={`${dmSans.variable} ${sora.variable} ${geistMono.variable} antialiased`}
       >
-        <AppLayout>{children}</AppLayout>
+        <AppLayout version={packageJson.version}>{children}</AppLayout>
       </body>
     </html>
   );
