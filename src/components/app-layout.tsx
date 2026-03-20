@@ -219,6 +219,7 @@ function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="px-4 py-3 border-t">
+        <div className="text-xs text-muted-foreground/50 mb-1.5">v0.1.3</div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           {syncStatus?.status === "syncing" ? (
             <>
