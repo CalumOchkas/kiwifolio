@@ -19,7 +19,9 @@ let lastCheckedAt = 0;
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 function toDateKey(date: Date): Date {
-  return new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+  );
 }
 
 /**
