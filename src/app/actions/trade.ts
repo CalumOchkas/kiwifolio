@@ -1,5 +1,6 @@
 "use server";
 
+import { backfillHoldingMetadata } from "@/lib/holding-metadata";
 import { prisma } from "@/lib/prisma";
 import { cacheTradeMarketData } from "@/lib/market-data";
 import { revalidatePath } from "next/cache";
@@ -37,6 +38,8 @@ export async function createTrade(portfolioId: string, formData: FormData) {
       fxRateToNzd,
     },
   });
+
+  backfillHoldingMetadata(portfolioId, [ticker]).catch(() => {});
 
   // Best-effort: cache EOD price and FX rate for this trade date
   cacheTradeMarketData(ticker, currency, new Date(tradeDate)).catch(() => {});
@@ -77,6 +80,8 @@ export async function updateTrade(id: string, portfolioId: string, formData: For
       fxRateToNzd,
     },
   });
+
+  backfillHoldingMetadata(portfolioId, [ticker]).catch(() => {});
 
   // Best-effort: cache EOD price and FX rate for this trade date
   cacheTradeMarketData(ticker, currency, new Date(tradeDate)).catch(() => {});

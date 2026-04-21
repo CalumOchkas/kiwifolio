@@ -30,7 +30,7 @@ import { TradesTableClient } from "@/components/trades-table-client";
 import { DeletePortfolioButton } from "@/components/delete-portfolio-button";
 import { RenamePortfolioInput } from "@/components/rename-portfolio-input";
 import { deleteDividend } from "@/app/actions/dividend";
-import { getLatestQuote, getLatestFxRate, getInstrumentMeta } from "@/lib/market-data";
+import { getLatestQuote, getLatestFxRate } from "@/lib/market-data";
 import { ArrowLeft, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -128,63 +128,6 @@ export default async function HoldingsPage({
       tickerMarketValues.set(ticker, { price, fxRate, mvNzd });
     })
   );
-
-  // Lazy backfill: populate missing instrument metadata from Yahoo Finance
-  const existingSettingsTickers = new Set(portfolio.holdingSettings.map((s) => s.ticker));
-
-  // Backfill existing HoldingSettings rows missing metadata
-  const needsMeta = portfolio.holdingSettings.filter(
-    (s) => !s.instrumentName || !s.exchange
-  );
-  // Create HoldingSettings rows for tickers that don't have one yet
-  const missingSettingsTickers = uniqueTickers.filter((t) => !existingSettingsTickers.has(t));
-
-  if (needsMeta.length > 0 || missingSettingsTickers.length > 0) {
-    await Promise.allSettled([
-      ...needsMeta.map(async (s) => {
-        const yahooSymbol = s.yahooSymbol ?? s.ticker;
-        const meta = await getInstrumentMeta(yahooSymbol);
-        if (!meta) return;
-        const updates: Record<string, string> = {};
-        if (!s.instrumentName && (meta.shortName || meta.longName)) {
-          const name = meta.shortName || meta.longName!;
-          updates.instrumentName = name;
-        }
-        if (!s.exchange && (meta.fullExchangeName || meta.exchange)) {
-          const exchange = meta.fullExchangeName || meta.exchange!;
-          updates.exchange = exchange;
-        }
-        if (Object.keys(updates).length > 0) {
-          await prisma.holdingSettings.update({
-            where: { id: s.id },
-            data: updates,
-          });
-          const existing = settingsMap.get(s.ticker);
-          if (existing) {
-            if (updates.instrumentName) existing.instrumentName = updates.instrumentName;
-            if (updates.exchange) existing.exchange = updates.exchange;
-          }
-        }
-      }),
-      ...missingSettingsTickers.map(async (ticker) => {
-        const meta = await getInstrumentMeta(ticker);
-        const data: { instrumentName?: string; exchange?: string } = {};
-        if (meta?.shortName || meta?.longName) data.instrumentName = meta.shortName || meta.longName!;
-        if (meta?.fullExchangeName || meta?.exchange) data.exchange = meta.fullExchangeName || meta.exchange!;
-        await prisma.holdingSettings.upsert({
-          where: { portfolioId_ticker: { portfolioId, ticker } },
-          update: data,
-          create: { portfolioId, ticker, ...data },
-        });
-        settingsMap.set(ticker, {
-          isFifExempt: false,
-          yahooSymbol: null,
-          instrumentName: data.instrumentName ?? null,
-          exchange: data.exchange ?? null,
-        });
-      }),
-    ]);
-  }
 
   return (
     <div className="space-y-6">
