@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getEodPrice, getFxRate } from "@/lib/market-data";
+import { deriveAvailableTaxYears } from "@/lib/tax-years";
 import { applyStockSplits, type SplitResult } from "@/app/actions/stock-splits";
 import { recordSyncIssues } from "@/lib/sync-issues";
 import { revalidatePath } from "next/cache";
@@ -240,18 +241,15 @@ export async function getAvailableTaxYears(portfolioIds: string[]): Promise<stri
 
   const trades = await prisma.trade.findMany({
     where: { portfolioId: { in: portfolioIds } },
-    select: { tradeDate: true },
+    select: {
+      portfolioId: true,
+      ticker: true,
+      tradeType: true,
+      quantity: true,
+      tradeDate: true,
+    },
     orderBy: { tradeDate: "asc" },
   });
 
-  if (trades.length === 0) return [];
-
-  const taxYears = new Set<string>();
-  for (const trade of trades) {
-    const d = trade.tradeDate;
-    const startYear = d.getMonth() < 3 ? d.getFullYear() - 1 : d.getFullYear();
-    taxYears.add(`${startYear}-${startYear + 1}`);
-  }
-
-  return [...taxYears].sort();
+  return deriveAvailableTaxYears(trades);
 }
