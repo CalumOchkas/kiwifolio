@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,6 +33,30 @@ type Trade = {
   fxRateToNzd: number;
 };
 
+type TradeFormState = {
+  ticker: string;
+  tradeType: string;
+  tradeDate: string;
+  quantity: string;
+  price: string;
+  brokerage: string;
+  currency: string;
+  fxRateToNzd: string;
+};
+
+function toTradeFormState(trade?: Trade): TradeFormState {
+  return {
+    ticker: trade?.ticker ?? "",
+    tradeType: trade?.tradeType ?? "BUY",
+    tradeDate: trade ? trade.tradeDate.toISOString().split("T")[0] : "",
+    quantity: trade ? String(trade.quantity) : "",
+    price: trade ? String(trade.price) : "",
+    brokerage: trade ? String(trade.brokerage) : "0",
+    currency: trade?.currency ?? "",
+    fxRateToNzd: trade ? String(trade.fxRateToNzd) : "",
+  };
+}
+
 function TradeForm({
   portfolioId,
   trade,
@@ -42,12 +66,35 @@ function TradeForm({
   trade?: Trade;
   onDone: () => void;
 }) {
-  const [tradeType, setTradeType] = useState(trade?.tradeType ?? "BUY");
+  const [formState, setFormState] = useState<TradeFormState>(() =>
+    toTradeFormState(trade)
+  );
+
+  useEffect(() => {
+    setFormState(toTradeFormState(trade));
+  }, [trade]);
+
+  function updateField<K extends keyof TradeFormState>(
+    field: K,
+    value: TradeFormState[K]
+  ) {
+    setFormState((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  }
 
   return (
     <form
       action={async (formData) => {
-        formData.set("tradeType", tradeType);
+        formData.set("ticker", formState.ticker);
+        formData.set("tradeType", formState.tradeType);
+        formData.set("tradeDate", formState.tradeDate);
+        formData.set("quantity", formState.quantity);
+        formData.set("price", formState.price);
+        formData.set("brokerage", formState.brokerage);
+        formData.set("currency", formState.currency);
+        formData.set("fxRateToNzd", formState.fxRateToNzd);
         if (trade) {
           await updateTrade(trade.id, portfolioId, formData);
         } else {
@@ -64,15 +111,21 @@ function TradeForm({
             id="ticker"
             name="ticker"
             placeholder="e.g. AAPL"
-            defaultValue={trade?.ticker}
+            value={formState.ticker}
+            onChange={(e) => updateField("ticker", e.target.value)}
             required
           />
         </div>
         <div className="space-y-2">
           <Label htmlFor="tradeType">Type</Label>
-          <Select value={tradeType} onValueChange={(v) => v && setTradeType(v)}>
+          <Select
+            value={formState.tradeType}
+            onValueChange={(value) => value && updateField("tradeType", value)}
+          >
             <SelectTrigger id="tradeType">
-              <SelectValue>{tradeType === "BUY" ? "Buy" : "Sell"}</SelectValue>
+              <SelectValue>
+                {formState.tradeType === "BUY" ? "Buy" : "Sell"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="BUY">Buy</SelectItem>
@@ -88,9 +141,8 @@ function TradeForm({
             id="tradeDate"
             name="tradeDate"
             type="date"
-            defaultValue={
-              trade ? trade.tradeDate.toISOString().split("T")[0] : undefined
-            }
+            value={formState.tradeDate}
+            onChange={(e) => updateField("tradeDate", e.target.value)}
             required
           />
         </div>
@@ -102,7 +154,8 @@ function TradeForm({
             type="number"
             step="any"
             min="0"
-            defaultValue={trade?.quantity}
+            value={formState.quantity}
+            onChange={(e) => updateField("quantity", e.target.value)}
             required
           />
         </div>
@@ -116,7 +169,8 @@ function TradeForm({
             type="number"
             step="any"
             min="0"
-            defaultValue={trade?.price}
+            value={formState.price}
+            onChange={(e) => updateField("price", e.target.value)}
             required
           />
         </div>
@@ -128,7 +182,8 @@ function TradeForm({
             type="number"
             step="any"
             min="0"
-            defaultValue={trade?.brokerage ?? 0}
+            value={formState.brokerage}
+            onChange={(e) => updateField("brokerage", e.target.value)}
           />
         </div>
       </div>
@@ -139,7 +194,8 @@ function TradeForm({
             id="currency"
             name="currency"
             placeholder="e.g. USD"
-            defaultValue={trade?.currency}
+            value={formState.currency}
+            onChange={(e) => updateField("currency", e.target.value)}
             required
           />
         </div>
@@ -152,7 +208,8 @@ function TradeForm({
             step="any"
             min="0"
             placeholder="e.g. 1.62"
-            defaultValue={trade?.fxRateToNzd}
+            value={formState.fxRateToNzd}
+            onChange={(e) => updateField("fxRateToNzd", e.target.value)}
             required
           />
         </div>
@@ -191,6 +248,13 @@ export function EditTradeDialog({
   trade: Trade;
 }) {
   const [open, setOpen] = useState(false);
+  const [formTrade, setFormTrade] = useState(trade);
+
+  useEffect(() => {
+    if (!open) {
+      setFormTrade(trade);
+    }
+  }, [open, trade]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -203,7 +267,7 @@ export function EditTradeDialog({
         </DialogHeader>
         <TradeForm
           portfolioId={portfolioId}
-          trade={trade}
+          trade={formTrade}
           onDone={() => setOpen(false)}
         />
       </DialogContent>
