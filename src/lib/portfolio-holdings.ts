@@ -311,8 +311,13 @@ export async function computePortfolioHoldings(
     fxRateToNzd: d.fxRateToNzd,
   }));
 
-  // Backfill missing instrument metadata from Yahoo Finance
-  const tickerMeta = await backfillInstrumentMeta(holdingSettings, activeTickers, symbolMap);
+  // Best-effort metadata fetch for display only. Persistence is handled in explicit
+  // mutation flows so dashboard and holdings reads stay side-effect free.
+  const tickerMeta = await resolveInstrumentMeta(
+    holdingSettings,
+    activeTickers,
+    symbolMap
+  );
 
   const { holdings, summary } = computeHoldingRows(
     tradeInputs,
@@ -325,9 +330,9 @@ export async function computePortfolioHoldings(
   return { holdings, summary, priceErrors };
 }
 
-// ── Lazy backfill: populate missing instrumentName/exchange from Yahoo ──────
+// ── Best-effort metadata fetch for display ──────────────────────────────────
 
-async function backfillInstrumentMeta(
+async function resolveInstrumentMeta(
   holdingSettings: Array<{ id: string; ticker: string; yahooSymbol: string | null; instrumentName: string | null; exchange: string | null }>,
   activeTickers: string[],
   symbolMap: Map<string, string>
@@ -340,7 +345,7 @@ async function backfillInstrumentMeta(
     });
   }
 
-  // Find active tickers missing metadata
+  // Fetch missing metadata for the current response only.
   const needsMeta = holdingSettings.filter(
     (s) => activeTickers.includes(s.ticker) && (!s.instrumentName || !s.exchange)
   );
@@ -352,10 +357,8 @@ async function backfillInstrumentMeta(
         const meta = await getInstrumentMeta(yahooSymbol);
         if (!meta) return;
 
-        const updates: Record<string, string> = {};
         if (!s.instrumentName && (meta.shortName || meta.longName)) {
           const name = meta.shortName || meta.longName!;
-          updates.instrumentName = name;
           tickerMeta.set(s.ticker, {
             ...tickerMeta.get(s.ticker)!,
             instrumentName: name,
@@ -363,17 +366,9 @@ async function backfillInstrumentMeta(
         }
         if (!s.exchange && (meta.fullExchangeName || meta.exchange)) {
           const exchange = meta.fullExchangeName || meta.exchange!;
-          updates.exchange = exchange;
           tickerMeta.set(s.ticker, {
             ...tickerMeta.get(s.ticker)!,
             exchange,
-          });
-        }
-
-        if (Object.keys(updates).length > 0) {
-          await prisma.holdingSettings.update({
-            where: { id: s.id },
-            data: updates,
           });
         }
       })
