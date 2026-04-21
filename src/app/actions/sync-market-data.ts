@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getEodPrice, getFxRate } from "@/lib/market-data";
+import { normalizePositionQuantity } from "@/lib/tax-report-snapshots";
 import { deriveAvailableTaxYears } from "@/lib/tax-years";
 import { applyStockSplits, type SplitResult } from "@/app/actions/stock-splits";
 import { recordSyncIssues } from "@/lib/sync-issues";
@@ -128,15 +129,24 @@ export async function syncMarketData(portfolioIds: string[], taxYear: string) {
     }
 
     // Calculate per-portfolio quantities
-    const openingQty = calculateQtyAtDate(trades, new Date(start.getTime() - 1));
-    const closingQty = calculateQtyAtDate(trades, effectiveEnd);
+    const openingQty = normalizePositionQuantity(
+      calculateQtyAtDate(trades, new Date(start.getTime() - 1))
+    );
+    const closingQty = normalizePositionQuantity(
+      calculateQtyAtDate(trades, effectiveEnd)
+    );
+    const tradesInYear = trades.filter(
+      (t) => t.tradeDate >= start && t.tradeDate <= effectiveEnd
+    );
 
     // Skip if no position at either end and no trades during the year
     if (openingQty === 0 && closingQty === 0) {
-      const tradesInYear = trades.filter(
-        (t) => t.tradeDate >= start && t.tradeDate <= effectiveEnd
-      );
-      if (tradesInYear.length === 0) continue;
+      if (tradesInYear.length === 0) {
+        if (existing && !existing.isManuallyEdited) {
+          await prisma.taxYearSnapshot.delete({ where: { id: existing.id } });
+        }
+        continue;
+      }
     }
 
     // Resolve Yahoo symbol (use override if configured, otherwise raw ticker)
