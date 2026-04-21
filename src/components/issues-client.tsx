@@ -35,6 +35,7 @@ const ISSUE_TYPE_CONFIG: Record<
   FX_RATE_MISSING: { label: "Missing FX Rate", variant: "secondary" },
   SYNC_FAILED: { label: "Sync Failed", variant: "destructive" },
   SPLIT_FETCH_FAILED: { label: "Split Check Failed", variant: "destructive" },
+  NEGATIVE_POSITION: { label: "Negative Position", variant: "destructive" },
 };
 
 function formatDate(date: Date): string {
@@ -86,7 +87,7 @@ export function IssuesClient({
   // Group issues by ticker for the "dismiss all" action
   const tickersWithMultipleIssues = new Set<string>();
   const tickerCounts = new Map<string, number>();
-  for (const issue of openIssues) {
+  for (const issue of openIssues.filter((issue) => issue.canDismiss)) {
     tickerCounts.set(issue.ticker, (tickerCounts.get(issue.ticker) ?? 0) + 1);
   }
   for (const [ticker, count] of tickerCounts) {
@@ -157,7 +158,8 @@ export function IssuesClient({
                         <div className="flex items-center gap-2">
                           {issue.ticker}
                           {tickersWithMultipleIssues.has(issue.ticker) &&
-                            !isResolved && (
+                            !isResolved &&
+                            issue.canDismiss && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -191,7 +193,7 @@ export function IssuesClient({
                         {issue.resolution}
                       </TableCell>
                       <TableCell>
-                        {!isResolved && (
+                        {!isResolved && issue.canDismiss && (
                           <Button
                             variant="ghost"
                             size="icon-sm"
