@@ -17,12 +17,22 @@ async function fetchHistorical(
   period2: Date
 ): Promise<HistoricalRow[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result: any = await yahooFinance.historical(symbol, {
+  const result: any = await yahooFinance.chart(symbol, {
     period1,
     period2,
     interval: "1d",
   });
-  return result as HistoricalRow[];
+
+  const quotes = Array.isArray(result?.quotes) ? result.quotes : [];
+
+  return quotes
+    .filter((quote: { date?: unknown; close?: unknown }) => {
+      return quote.date != null && typeof quote.close === "number";
+    })
+    .map((quote: { date: Date | string | number; close: number }) => ({
+      date: quote.date instanceof Date ? quote.date : new Date(quote.date),
+      close: quote.close,
+    }));
 }
 
 describe("yahoo-finance2 API integration", () => {

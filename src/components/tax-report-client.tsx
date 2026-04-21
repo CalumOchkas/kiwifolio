@@ -402,6 +402,37 @@ export function TaxReportClient({
                     />
                   </div>
                 )}
+
+                {report.result.deMinimisHoldings.length > 0 && (
+                  <div className="mt-4 border-t pt-4">
+                    <p className="text-sm font-medium">Holdings Pooled Acquisition Cost</p>
+                    <div className="mt-2 overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Ticker</TableHead>
+                            <TableHead className="text-right">Qty</TableHead>
+                            <TableHead className="text-right">Pooled Cost</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {report.result.deMinimisHoldings.map((holding) => (
+                            <TableRow key={holding.ticker}>
+                              <TableCell className="font-medium">{holding.ticker}</TableCell>
+                              <TableCell className="text-right">
+                                {holding.quantity.toLocaleString(undefined, {
+                                  minimumFractionDigits: 0,
+                                  maximumFractionDigits: 6,
+                                })}
+                              </TableCell>
+                              <TableCell className="text-right">{fmt(holding.pooledAcquisitionCostNzd)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

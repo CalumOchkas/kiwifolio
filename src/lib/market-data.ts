@@ -14,7 +14,7 @@ function toDateKey(date: Date): Date {
 
 /**
  * Fetch historical price data, returning array of rows.
- * Wraps yahoo-finance2 with explicit typing.
+ * Uses Yahoo's chart() endpoint and returns a simplified array of rows.
  */
 async function fetchHistorical(
   symbol: string,
@@ -22,12 +22,22 @@ async function fetchHistorical(
   period2: Date
 ): Promise<HistoricalRow[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result: any = await yahooFinance.historical(symbol, {
+  const result: any = await yahooFinance.chart(symbol, {
     period1,
     period2,
     interval: "1d",
   }, { validateResult: false });
-  return result as HistoricalRow[];
+
+  const quotes = Array.isArray(result?.quotes) ? result.quotes : [];
+
+  return quotes
+    .filter((quote: { date?: unknown; close?: unknown }) => {
+      return quote.date != null && typeof quote.close === "number";
+    })
+    .map((quote: { date: Date | string | number; close: number }) => ({
+      date: quote.date instanceof Date ? quote.date : new Date(quote.date),
+      close: quote.close,
+    }));
 }
 
 /**
@@ -185,8 +195,8 @@ const quoteCurrencyCache = new Map<string, { value: string | null; fetchedAt: nu
 
 /**
  * Get the quote currency for a ticker from Yahoo Finance.
- * Needed because the historical() API doesn't return currency info,
- * so we can't otherwise detect pence vs pounds.
+ * Needed because fetchHistorical() only returns date/close rows,
+ * so we still need quote metadata to detect pence vs pounds.
  */
 async function getQuoteCurrency(ticker: string): Promise<string | null> {
   const cached = quoteCurrencyCache.get(ticker);

@@ -280,6 +280,13 @@ describe("calculateDeMinimis", () => {
     const result = calculateDeMinimis(trades, new Set(), TY_START, TY_END);
     expect(result.eligible).toBe(true);
     expect(result.maxCostBasis).toBe(16000);
+    expect(result.holdings).toEqual([
+      {
+        ticker: "AAPL",
+        quantity: 100,
+        pooledAcquisitionCostNzd: 16000,
+      },
+    ]);
   });
 
   it("not eligible when cost basis over 50k", () => {
@@ -297,6 +304,13 @@ describe("calculateDeMinimis", () => {
     const result = calculateDeMinimis(trades, new Set(), TY_START, TY_END);
     expect(result.eligible).toBe(false);
     expect(result.maxCostBasis).toBe(64000);
+    expect(result.holdings).toEqual([
+      {
+        ticker: "AAPL",
+        quantity: 200,
+        pooledAcquisitionCostNzd: 64000,
+      },
+    ]);
   });
 
   it("excludes exempt tickers", () => {
@@ -319,6 +333,7 @@ describe("calculateDeMinimis", () => {
     );
     expect(result.eligible).toBe(true);
     expect(result.maxCostBasis).toBe(0);
+    expect(result.holdings).toEqual([]);
   });
 
   it("tracks cost basis from pre-year trades", () => {
@@ -336,6 +351,99 @@ describe("calculateDeMinimis", () => {
     const result = calculateDeMinimis(trades, new Set(), TY_START, TY_END);
     expect(result.eligible).toBe(false);
     expect(result.maxCostBasis).toBe(64000);
+    expect(result.holdings).toEqual([
+      {
+        ticker: "AAPL",
+        quantity: 200,
+        pooledAcquisitionCostNzd: 64000,
+      },
+    ]);
+  });
+
+  it("reduces cost basis by acquisition cost rather than sell proceeds", () => {
+    const trades = [
+      makeTrade({
+        ticker: "AAPL",
+        tradeDate: d("2024-04-10"),
+        quantity: 100,
+        price: 100,
+        fxRateToNzd: 1.5,
+      }),
+      makeTrade({
+        ticker: "AAPL",
+        tradeType: "SELL",
+        tradeDate: d("2024-10-10"),
+        quantity: 40,
+        price: 300,
+        fxRateToNzd: 2.0,
+      }),
+    ];
+
+    const result = calculateDeMinimis(trades, new Set(), TY_START, TY_END);
+
+    // Buy adds 15,000 NZD. Sell removes 40 shares at original 150 NZD/share cost = 6,000.
+    // Peak should remain the buy-side 15,000, not be distorted by the sell proceeds.
+    expect(result.eligible).toBe(true);
+    expect(result.maxCostBasis).toBe(15000);
+    expect(result.holdings).toEqual([
+      {
+        ticker: "AAPL",
+        quantity: 60,
+        pooledAcquisitionCostNzd: 9000,
+      },
+    ]);
+  });
+
+  it("is unaffected by sell-day FX when reducing existing cost basis", () => {
+    const lowFxSell = calculateDeMinimis(
+      [
+        makeTrade({
+          ticker: "AAPL",
+          tradeDate: d("2024-04-10"),
+          quantity: 100,
+          price: 100,
+          fxRateToNzd: 1.5,
+        }),
+        makeTrade({
+          ticker: "AAPL",
+          tradeType: "SELL",
+          tradeDate: d("2024-10-10"),
+          quantity: 40,
+          price: 300,
+          fxRateToNzd: 1.0,
+        }),
+      ],
+      new Set(),
+      TY_START,
+      TY_END
+    );
+
+    const highFxSell = calculateDeMinimis(
+      [
+        makeTrade({
+          ticker: "AAPL",
+          tradeDate: d("2024-04-10"),
+          quantity: 100,
+          price: 100,
+          fxRateToNzd: 1.5,
+        }),
+        makeTrade({
+          ticker: "AAPL",
+          tradeType: "SELL",
+          tradeDate: d("2024-10-10"),
+          quantity: 40,
+          price: 300,
+          fxRateToNzd: 3.0,
+        }),
+      ],
+      new Set(),
+      TY_START,
+      TY_END
+    );
+
+    expect(lowFxSell.maxCostBasis).toBe(15000);
+    expect(highFxSell.maxCostBasis).toBe(15000);
+    expect(lowFxSell.holdings).toEqual(highFxSell.holdings);
   });
 });
 

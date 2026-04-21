@@ -64,6 +64,13 @@ export interface PortfolioTaxResult {
   totalFtcNzd: number;
   deMinimisEligible: boolean;
   deMinimisMaxCostBasis: number;
+  deMinimisHoldings: DeMinimisHolding[];
+}
+
+export interface DeMinimisHolding {
+  ticker: string;
+  quantity: number;
+  pooledAcquisitionCostNzd: number;
 }
 
 // ── Tax year helpers ─────────────────────────────────────────────────────────
@@ -265,7 +272,7 @@ export function calculateTickerCv(
  * Rule: If total cost basis of ALL foreign (non-exempt) holdings across ALL
  * portfolios never exceeds $50,000 NZD during the tax year, the user is exempt.
  *
- * Cost basis = cumulative (BUY cost NZD - SELL cost NZD) at each trade.
+ * Cost basis = cumulative buy cost NZD less acquisition cost NZD of shares sold.
  * We walk trades chronologically and track the peak.
  */
 export function calculateDeMinimis(
@@ -273,40 +280,85 @@ export function calculateDeMinimis(
   exemptTickers: Set<string>,
   taxYearStart: Date,
   taxYearEnd: Date
-): { eligible: boolean; maxCostBasis: number } {
+): {
+  eligible: boolean;
+  maxCostBasis: number;
+  holdings: DeMinimisHolding[];
+} {
   // Include all trades up to end of tax year (cost basis is cumulative)
   const relevantTrades = allTrades
     .filter((t) => !exemptTickers.has(t.ticker) && t.tradeDate <= taxYearEnd)
     .sort((a, b) => a.tradeDate.getTime() - b.tradeDate.getTime());
 
+  const tickerPools = new Map<string, { quantity: number; costBasisNzd: number }>();
+  const QTY_EPSILON = 0.0000001;
+
+  function applyTradeToPool(trade: TradeData): number {
+    const pool = tickerPools.get(trade.ticker) ?? { quantity: 0, costBasisNzd: 0 };
+
+    if (trade.tradeType === "BUY") {
+      const buyCostNzd = (trade.quantity * trade.price + trade.brokerage) * trade.fxRateToNzd;
+      pool.quantity += trade.quantity;
+      pool.costBasisNzd += buyCostNzd;
+      tickerPools.set(trade.ticker, pool);
+      return buyCostNzd;
+    }
+
+    if (pool.quantity <= QTY_EPSILON || pool.costBasisNzd <= 0) {
+      tickerPools.set(trade.ticker, { quantity: 0, costBasisNzd: 0 });
+      return 0;
+    }
+
+    const quantitySold = Math.min(trade.quantity, pool.quantity);
+    const avgCostPerShareNzd = pool.costBasisNzd / pool.quantity;
+    const reductionNzd = Math.min(pool.costBasisNzd, quantitySold * avgCostPerShareNzd);
+
+    pool.quantity = Math.max(0, pool.quantity - quantitySold);
+    pool.costBasisNzd = Math.max(0, pool.costBasisNzd - reductionNzd);
+
+    if (pool.quantity <= QTY_EPSILON || pool.costBasisNzd <= 0) {
+      tickerPools.set(trade.ticker, { quantity: 0, costBasisNzd: 0 });
+    } else {
+      tickerPools.set(trade.ticker, pool);
+    }
+
+    return reductionNzd;
+  }
+
+  const preYearTrades = relevantTrades.filter((t) => t.tradeDate < taxYearStart);
+  const inYearTrades = relevantTrades.filter((t) => isInTaxYear(t.tradeDate, taxYearStart, taxYearEnd));
+
   let costBasis = 0;
   let maxCostBasis = 0;
 
-  for (const t of relevantTrades) {
-    const nzdCost = (t.quantity * t.price + t.brokerage) * t.fxRateToNzd;
-    if (t.tradeType === "BUY") {
-      costBasis += nzdCost;
-    } else {
-      costBasis -= nzdCost;
-    }
-    // Only track peak during the tax year itself
-    if (isInTaxYear(t.tradeDate, taxYearStart, taxYearEnd)) {
-      maxCostBasis = Math.max(maxCostBasis, costBasis);
-    }
+  for (const trade of preYearTrades) {
+    costBasis += trade.tradeType === "BUY"
+      ? applyTradeToPool(trade)
+      : -applyTradeToPool(trade);
   }
 
-  // Also check cost basis at start of year (from pre-year trades)
-  const preYearCostBasis = relevantTrades
-    .filter((t) => t.tradeDate < taxYearStart)
-    .reduce((s, t) => {
-      const nzdCost = (t.quantity * t.price + t.brokerage) * t.fxRateToNzd;
-      return t.tradeType === "BUY" ? s + nzdCost : s - nzdCost;
-    }, 0);
-  maxCostBasis = Math.max(maxCostBasis, preYearCostBasis);
+  maxCostBasis = Math.max(maxCostBasis, costBasis);
+
+  for (const trade of inYearTrades) {
+    costBasis += trade.tradeType === "BUY"
+      ? applyTradeToPool(trade)
+      : -applyTradeToPool(trade);
+    maxCostBasis = Math.max(maxCostBasis, costBasis);
+  }
+
+  const holdings = [...tickerPools.entries()]
+    .map(([ticker, pool]) => ({
+      ticker,
+      quantity: pool.quantity,
+      pooledAcquisitionCostNzd: pool.costBasisNzd,
+    }))
+    .filter((holding) => holding.quantity > QTY_EPSILON && holding.pooledAcquisitionCostNzd > 0)
+    .sort((a, b) => b.pooledAcquisitionCostNzd - a.pooledAcquisitionCostNzd || a.ticker.localeCompare(b.ticker));
 
   return {
     eligible: maxCostBasis <= 50000,
     maxCostBasis,
+    holdings,
   };
 }
 
@@ -371,7 +423,11 @@ export function calculatePortfolioTax(
 
   // De Minimis: uses all trades across all portfolios if provided
   const deMinimisTradeSet = allTradesAllPortfolios ?? trades;
-  const { eligible: deMinimisEligible, maxCostBasis: deMinimisMaxCostBasis } =
+  const {
+    eligible: deMinimisEligible,
+    maxCostBasis: deMinimisMaxCostBasis,
+    holdings: deMinimisHoldings,
+  } =
     calculateDeMinimis(deMinimisTradeSet, exemptTickers, start, end);
 
   return {
@@ -382,5 +438,6 @@ export function calculatePortfolioTax(
     totalFtcNzd,
     deMinimisEligible,
     deMinimisMaxCostBasis,
+    deMinimisHoldings,
   };
 }
