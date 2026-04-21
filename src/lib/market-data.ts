@@ -1,7 +1,9 @@
 import YahooFinance from "yahoo-finance2";
 import { prisma } from "@/lib/prisma";
 
-const yahooFinance = new YahooFinance();
+const yahooFinance = new YahooFinance({
+  suppressNotices: ["yahooSurvey"],
+});
 
 type HistoricalRow = { date: Date; close: number };
 
