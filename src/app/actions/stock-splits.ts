@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { fetchSplitEvents } from "@/lib/market-data";
+import { isSameSplitEvent, toMarketDateKey } from "@/lib/stock-split-utils";
 import { recordSplitIssue } from "@/lib/sync-issues";
 import { revalidatePath } from "next/cache";
 
@@ -17,12 +18,6 @@ export interface SplitResult {
 // Throttle: only check Yahoo for splits once per hour
 let lastCheckedAt = 0;
 const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
-
-function toDateKey(date: Date): Date {
-  return new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
-  );
-}
 
 /**
  * Detect and apply stock splits for all tickers with trades.
@@ -70,9 +65,12 @@ export async function applyStockSplits(force = false): Promise<SplitResult[]> {
 
   // 3. Load already-applied splits
   const appliedSplits = await prisma.appliedSplit.findMany();
-  const appliedSet = new Set(
-    appliedSplits.map((s) => `${s.ticker}|${toDateKey(s.splitDate).getTime()}`)
-  );
+  const appliedEvents = appliedSplits.map((split) => ({
+    ticker: split.ticker,
+    splitDate: split.splitDate,
+    numerator: split.numerator,
+    denominator: split.denominator,
+  }));
 
   // 4. For each ticker, fetch and apply splits
   for (const [ticker, earliestDate] of tickerInfo) {
@@ -99,10 +97,19 @@ export async function applyStockSplits(force = false): Promise<SplitResult[]> {
     }
 
     for (const split of splits) {
-      const splitDateKey = toDateKey(split.date);
-      const dedupKey = `${ticker}|${splitDateKey.getTime()}`;
+      const splitDateKey = toMarketDateKey(split.date);
 
-      if (appliedSet.has(dedupKey)) {
+      if (
+        appliedEvents.some(
+          (appliedSplit) =>
+            appliedSplit.ticker === ticker &&
+            isSameSplitEvent(appliedSplit, {
+              splitDate: split.date,
+              numerator: split.numerator,
+              denominator: split.denominator,
+            })
+        )
+      ) {
         continue; // Already applied
       }
 
@@ -159,7 +166,12 @@ export async function applyStockSplits(force = false): Promise<SplitResult[]> {
           adjustedCount = tradesToAdjust.length;
         });
 
-        appliedSet.add(dedupKey);
+        appliedEvents.push({
+          ticker,
+          splitDate: splitDateKey,
+          numerator: split.numerator,
+          denominator: split.denominator,
+        });
 
         results.push({
           ticker,
